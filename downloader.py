@@ -3,9 +3,10 @@ import yt_dlp
 import uuid
 import threading
 import time
+import requests
 from pathlib import Path
 from config import DOWNLOAD_DIR, JOB_EXPIRATION, MAX_CONCURRENT_DOWNLOADS
-from utils import logger, sanitize_filename
+from utils import logger, sanitize_filename, is_direct_file_url, extract_filename_from_url
 
 # ---------------------------------------------------------------------------
 # In-memory job store — protected by jobs_lock
@@ -82,6 +83,10 @@ class Downloader:
         Extract metadata from a URL using yt-dlp WITHOUT downloading the media.
         Returns a dict with 'success' True/False and either metadata or an error.
         """
+        # Handle direct file URLs
+        if is_direct_file_url(url):
+            return self._get_direct_file_info(url)
+
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -145,6 +150,39 @@ class Downloader:
             logger.error(f"Unexpected error fetching info for {url}: {exc}")
             return {'success': False, 'error': {'code': 'FETCH_ERROR', 'message': 'Unable to fetch video information.'}}
 
+    def _get_direct_file_info(self, url: str) -> dict:
+        """Get metadata for a direct file URL by checking headers."""
+        try:
+            resp = requests.head(
+                url,
+                timeout=10,
+                allow_redirects=True,
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+            )
+            resp.raise_for_status()
+
+            content_length = int(resp.headers.get('Content-Length', 0))
+            content_type = resp.headers.get('Content-Type', '')
+            filename = extract_filename_from_url(url)
+
+            # Format file size
+            filesize = self._format_bytes(content_length) if content_length else 'Unknown'
+
+            return {
+                'success': True,
+                'title': filename,
+                'uploader': 'Direct Link',
+                'duration': 0,
+                'thumbnail': '',
+                'formats': [
+                    {'id': 'direct', 'label': f'Download ({filesize})'},
+                ],
+            }
+
+        except requests.RequestException as exc:
+            logger.error(f"Failed to fetch direct file info for {url}: {exc}")
+            return {'success': False, 'error': {'code': 'FETCH_ERROR', 'message': 'Could not access the file. The link may be expired or invalid.'}}
+
     def start_download(self, url: str, format_choice: str) -> str:
         """
         Create a new download job, start it in a background thread, and return the job_id.
@@ -169,6 +207,7 @@ class Downloader:
                 'eta': '',
                 'filename': '',
                 'error': '',
+                'url': url,
                 'updated_at': time.time(),
                 'started_at': time.time(),
                 'downloaded_bytes': 0,
@@ -208,6 +247,44 @@ class Downloader:
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['updated_at'] = time.time()
             return True
+
+    def resume_download(self, job_id: str) -> bool:
+        """
+        Resume a failed/cancelled direct file download from where it left off.
+        Returns True if resumed, False if job not found or not resumable.
+        """
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if not job:
+                return False
+
+            # Only resumable if it was a direct download that failed/cancelled
+            url = job.get('url', '')
+            if not url or not is_direct_file_url(url):
+                return False
+            if job['status'] not in ('failed', 'cancelled'):
+                return False
+
+            downloaded = job.get('downloaded_bytes', 0)
+            if downloaded <= 0:
+                return False
+
+            # Reset job state for resume
+            job['status'] = 'queued'
+            job['error'] = ''
+            job['updated_at'] = time.time()
+            job['started_at'] = time.time()
+
+            stop_event = threading.Event()
+            _stop_events[job_id] = stop_event
+
+        thread = threading.Thread(
+            target=self._download_direct_resume,
+            args=(job_id, url, stop_event),
+            daemon=True,
+        )
+        thread.start()
+        return True
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -316,12 +393,248 @@ class Downloader:
         stop_event: threading.Event,
     ) -> None:
         """
-        Background thread: performs the actual download using yt-dlp.
+        Background thread: performs the actual download using yt-dlp or direct HTTP.
         Updates the job dict on completion or failure.
         """
         logger.info(f"Job {job_id} starting — format={format_choice} url={url}")
 
-        # Output template: title + job_id to guarantee uniqueness
+        # Direct file download
+        if is_direct_file_url(url):
+            self._download_direct(job_id, url, stop_event)
+            return
+
+        # yt-dlp download
+        self._download_ytdlp(job_id, url, format_choice, stop_event)
+
+    def _download_direct(
+        self,
+        job_id: str,
+        url: str,
+        stop_event: threading.Event,
+    ) -> None:
+        """Download a direct file URL using requests with streaming."""
+        filename = extract_filename_from_url(url)
+        # Append job_id to avoid collisions
+        name_parts = filename.rsplit('.', 1)
+        if len(name_parts) == 2:
+            safe_name = f"{name_parts[0]}_{job_id}.{name_parts[1]}"
+        else:
+            safe_name = f"{filename}_{job_id}"
+
+        filepath = Path(DOWNLOAD_DIR) / safe_name
+
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            resp = requests.get(url, headers=headers, stream=True, timeout=30, allow_redirects=True)
+            resp.raise_for_status()
+
+            total = int(resp.headers.get('Content-Length', 0))
+            downloaded = 0
+            chunk_size = 8192
+            start_time = time.time()
+
+            with open(filepath, 'wb') as f:
+                for chunk in resp.iter_content(chunk_size=chunk_size):
+                    if stop_event.is_set():
+                        with jobs_lock:
+                            if job_id in jobs:
+                                jobs[job_id]['status'] = 'cancelled'
+                                jobs[job_id]['updated_at'] = time.time()
+                        return
+
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+
+                        # Update progress
+                        with jobs_lock:
+                            if job_id not in jobs:
+                                return
+                            job = jobs[job_id]
+                            job['updated_at'] = time.time()
+                            job['status'] = 'downloading'
+                            job['downloaded_bytes'] = downloaded
+                            job['total_bytes'] = total
+                            job['fragment'] = self._format_bytes(downloaded)
+
+                            if total > 0:
+                                job['progress'] = round(downloaded / total * 100, 1)
+                                job['filesize'] = self._format_bytes(total)
+                            else:
+                                job['filesize'] = f"~{self._format_bytes(downloaded)}"
+
+                            elapsed_secs = time.time() - job.get('started_at', job['updated_at'])
+                            em, es = divmod(int(elapsed_secs), 60)
+                            eh, em = divmod(em, 60)
+                            job['elapsed'] = f"{eh:02d}:{em:02d}:{es:02d}" if eh else f"{em:02d}:{es:02d}"
+
+                            if downloaded > 0 and elapsed_secs > 2:
+                                speed = downloaded / elapsed_secs
+                                job['speed'] = f"{speed / 1_048_576:.1f} MB/s"
+                                if total > 0 and speed > 0:
+                                    remaining = (total - downloaded) / speed
+                                    rm, rs = divmod(int(remaining), 60)
+                                    rh, rm = divmod(rm, 60)
+                                    job['eta'] = f"{rh:02d}:{rm:02d}:{rs:02d}" if rh else f"{rm:02d}:{rs:02d}"
+
+            if stop_event.is_set():
+                with jobs_lock:
+                    if job_id in jobs:
+                        jobs[job_id]['status'] = 'cancelled'
+                        jobs[job_id]['updated_at'] = time.time()
+                return
+
+            with jobs_lock:
+                if job_id in jobs:
+                    jobs[job_id]['status'] = 'completed'
+                    jobs[job_id]['filename'] = safe_name
+                    jobs[job_id]['progress'] = 100
+                    jobs[job_id]['updated_at'] = time.time()
+
+            logger.info(f"Job {job_id} completed (direct) — file: {safe_name}")
+
+        except Exception as exc:
+            err_msg = str(exc)
+            logger.error(f"Job {job_id} failed (direct): {err_msg}")
+
+            with jobs_lock:
+                if job_id in jobs:
+                    if 'DOWNLOAD_CANCELLED' in err_msg:
+                        jobs[job_id]['status'] = 'cancelled'
+                    else:
+                        jobs[job_id]['status'] = 'failed'
+                        jobs[job_id]['error'] = f'Download failed: {err_msg[:100]}'
+                    jobs[job_id]['updated_at'] = time.time()
+
+            # Clean up partial file
+            try:
+                if filepath.is_file():
+                    filepath.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def _download_direct_resume(
+        self,
+        job_id: str,
+        url: str,
+        stop_event: threading.Event,
+    ) -> None:
+        """Resume a direct file download from a previous byte offset."""
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if not job:
+                return
+            existing_bytes = job.get('downloaded_bytes', 0)
+            safe_name = job.get('filename', '')
+
+        if not safe_name:
+            # Rebuild filename
+            filename = extract_filename_from_url(url)
+            name_parts = filename.rsplit('.', 1)
+            if len(name_parts) == 2:
+                safe_name = f"{name_parts[0]}_{job_id}.{name_parts[1]}"
+            else:
+                safe_name = f"{filename}_{job_id}"
+
+        filepath = Path(DOWNLOAD_DIR) / safe_name
+
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Range': f'bytes={existing_bytes}-',
+            }
+            resp = requests.get(url, headers=headers, stream=True, timeout=30, allow_redirects=True)
+            resp.raise_for_status()
+
+            total = int(resp.headers.get('Content-Length', 0)) + existing_bytes
+            downloaded = existing_bytes
+            chunk_size = 8192
+
+            with open(filepath, 'ab') as f:
+                for chunk in resp.iter_content(chunk_size=chunk_size):
+                    if stop_event.is_set():
+                        with jobs_lock:
+                            if job_id in jobs:
+                                jobs[job_id]['status'] = 'cancelled'
+                                jobs[job_id]['downloaded_bytes'] = downloaded
+                                jobs[job_id]['updated_at'] = time.time()
+                        return
+
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+
+                        with jobs_lock:
+                            if job_id not in jobs:
+                                return
+                            job = jobs[job_id]
+                            job['updated_at'] = time.time()
+                            job['status'] = 'downloading'
+                            job['downloaded_bytes'] = downloaded
+                            job['total_bytes'] = total
+                            job['filename'] = safe_name
+                            job['fragment'] = self._format_bytes(downloaded)
+
+                            if total > 0:
+                                job['progress'] = round(downloaded / total * 100, 1)
+                                job['filesize'] = self._format_bytes(total)
+                            else:
+                                job['filesize'] = f"~{self._format_bytes(downloaded)}"
+
+                            elapsed_secs = time.time() - job.get('started_at', job['updated_at'])
+                            em, es = divmod(int(elapsed_secs), 60)
+                            eh, em = divmod(em, 60)
+                            job['elapsed'] = f"{eh:02d}:{em:02d}:{es:02d}" if eh else f"{em:02d}:{es:02d}"
+
+                            # Speed based on new bytes only (excluding existing)
+                            new_bytes = downloaded - existing_bytes
+                            if new_bytes > 0 and elapsed_secs > 2:
+                                speed = new_bytes / elapsed_secs
+                                job['speed'] = f"{speed / 1_048_576:.1f} MB/s"
+                                if total > 0 and speed > 0:
+                                    remaining = (total - downloaded) / speed
+                                    rm, rs = divmod(int(remaining), 60)
+                                    rh, rm = divmod(rm, 60)
+                                    job['eta'] = f"{rh:02d}:{rm:02d}:{rs:02d}" if rh else f"{rm:02d}:{rs:02d}"
+
+            if stop_event.is_set():
+                with jobs_lock:
+                    if job_id in jobs:
+                        jobs[job_id]['status'] = 'cancelled'
+                        jobs[job_id]['updated_at'] = time.time()
+                return
+
+            with jobs_lock:
+                if job_id in jobs:
+                    jobs[job_id]['status'] = 'completed'
+                    jobs[job_id]['filename'] = safe_name
+                    jobs[job_id]['progress'] = 100
+                    jobs[job_id]['updated_at'] = time.time()
+
+            logger.info(f"Job {job_id} completed (resumed) — file: {safe_name}")
+
+        except Exception as exc:
+            err_msg = str(exc)
+            logger.error(f"Job {job_id} failed (resume): {err_msg}")
+
+            with jobs_lock:
+                if job_id in jobs:
+                    if 'DOWNLOAD_CANCELLED' in err_msg:
+                        jobs[job_id]['status'] = 'cancelled'
+                    else:
+                        jobs[job_id]['status'] = 'failed'
+                        jobs[job_id]['error'] = f'Download failed: {err_msg[:100]}'
+                    jobs[job_id]['downloaded_bytes'] = downloaded
+                    jobs[job_id]['updated_at'] = time.time()
+
+    def _download_ytdlp(
+        self,
+        job_id: str,
+        url: str,
+        format_choice: str,
+        stop_event: threading.Event,
+    ) -> None:
+        """Download using yt-dlp for platform URLs."""
         output_tmpl = str(Path(DOWNLOAD_DIR) / f'%(title)s_{job_id}.%(ext)s')
 
         ydl_opts: dict = {

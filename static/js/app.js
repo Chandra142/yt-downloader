@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressElapsed   = document.getElementById('progress-elapsed');
     const progressRemaining = document.getElementById('progress-remaining');
     const cancelBtn         = document.getElementById('cancel-btn');
+    const resumeBtn         = document.getElementById('resume-btn');
     const saveFileBtn       = document.getElementById('save-file-btn');
     const copyLinkBtn       = document.getElementById('copy-link-btn');
     const completedActions  = document.getElementById('completed-actions');
@@ -152,9 +153,15 @@ document.addEventListener('DOMContentLoaded', () => {
         progressElapsed.textContent = '00:00';
         progressRemaining.textContent = '—';
         completedActions.classList.add('hidden');
+        resumeBtn.classList.add('hidden');
+        saveFileBtn.classList.add('hidden');
         saveFileBtn.href = '#';
+        copyLinkBtn.classList.add('hidden');
         newDownloadBtn.classList.add('hidden');
         cancelBtn.classList.remove('hidden');
+        cancelBtn.disabled = false;
+        resumeBtn.disabled = false;
+        resumeBtn.innerHTML = '▶ Resume';
         downloadBtn.disabled = false;
         downloadBtn.innerHTML = '⬇ Download';
         currentJobId = null;
@@ -420,7 +427,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressRemaining.textContent = '—';
                 setDownloadingState(false);
                 cancelBtn.classList.add('hidden');
+                resumeBtn.classList.add('hidden');
                 saveFileBtn.href = `/download/${currentJobId}`;
+                saveFileBtn.classList.remove('hidden');
+                copyLinkBtn.classList.remove('hidden');
                 completedActions.classList.remove('hidden');
                 newDownloadBtn.classList.remove('hidden');
                 showToast('Download complete!', 'success');
@@ -432,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setDownloadingState(false);
                 cancelBtn.classList.add('hidden');
                 completedActions.classList.remove('hidden');
+                resumeBtn.classList.remove('hidden');
                 newDownloadBtn.classList.remove('hidden');
                 break;
 
@@ -441,6 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setDownloadingState(false);
                 cancelBtn.classList.add('hidden');
                 completedActions.classList.remove('hidden');
+                resumeBtn.classList.remove('hidden');
                 newDownloadBtn.classList.remove('hidden');
                 showToast('Download failed', 'error');
                 break;
@@ -467,6 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setDownloadingState(false);
                 cancelBtn.classList.add('hidden');
                 completedActions.classList.remove('hidden');
+                resumeBtn.classList.remove('hidden');
                 newDownloadBtn.classList.remove('hidden');
                 showToast('Download cancelled', 'info');
             } else {
@@ -475,6 +488,43 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             cancelBtn.disabled = false;
             console.error('Cancel request failed:', err.message);
+        }
+    });
+
+    // ----------------------------------------------------------------
+    // Resume download
+    // ----------------------------------------------------------------
+    resumeBtn.addEventListener('click', async () => {
+        if (!currentJobId) return;
+
+        resumeBtn.disabled = true;
+        resumeBtn.innerHTML = '<span class="spinner"></span> Resuming…';
+
+        try {
+            const res = await fetch(`/api/resume/${currentJobId}`, { method: 'POST' });
+            const data = await res.json();
+
+            if (data.success) {
+                resumeBtn.classList.add('hidden');
+                saveFileBtn.classList.add('hidden');
+                copyLinkBtn.classList.add('hidden');
+                cancelBtn.classList.remove('hidden');
+                cancelBtn.disabled = false;
+                setProgress(0);
+                progressStatus.textContent = 'Resuming…';
+                progressSpeed.textContent = '';
+                progressEta.textContent = 'ETA: --:--';
+                startPolling();
+                showToast('Download resuming…', 'info');
+            } else {
+                resumeBtn.disabled = false;
+                resumeBtn.innerHTML = '▶ Resume';
+                showToast(data.error?.message || 'Cannot resume this download.', 'error');
+            }
+        } catch (err) {
+            resumeBtn.disabled = false;
+            resumeBtn.innerHTML = '▶ Resume';
+            console.error('Resume request failed:', err.message);
         }
     });
 

@@ -11,6 +11,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger('ytdownloader')
 
+DIRECT_FILE_EXTENSIONS = (
+    '.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv', '.m4v',
+    '.mp3', '.wav', '.flac', '.aac', '.ogg', '.opus', '.wma',
+    '.ts', '.m3u8', '.mpd',
+)
+
 def normalize_url(url: str) -> str:
     """Extract the real URL from pasted text and strip problematic query params."""
     if not url:
@@ -29,7 +35,6 @@ def normalize_url(url: str) -> str:
         parsed = urlparse(cleaned)
         if 'youtube.com' in (parsed.netloc or ''):
             params = parse_qs(parsed.query)
-            # These params trigger playlist/radio processing — remove them
             for key in ['list', 'start_radio', 'index', 'pp']:
                 params.pop(key, None)
             new_query = urlencode(params, doseq=True)
@@ -40,8 +45,32 @@ def normalize_url(url: str) -> str:
     return cleaned
 
 
+def is_direct_file_url(url: str) -> bool:
+    """Check if a URL points directly to a downloadable media file."""
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+        path_lower = parsed.path.lower()
+        return any(path_lower.endswith(ext) for ext in DIRECT_FILE_EXTENSIONS)
+    except Exception:
+        return False
+
+
+def extract_filename_from_url(url: str) -> str:
+    """Extract a clean filename from a direct file URL."""
+    try:
+        parsed = urlparse(url)
+        filename = Path(parsed.path).name
+        # Remove query params that might be attached
+        filename = filename.split('?')[0]
+        return sanitize_filename(filename) if filename else "download"
+    except Exception:
+        return "download"
+
+
 def is_valid_url(url: str) -> bool:
-    """Validate supported media URLs, allowing pasted labels like '1 = https://...'"""
+    """Validate supported media URLs or direct file links."""
     cleaned = normalize_url(url)
     if not cleaned:
         return False
@@ -51,6 +80,11 @@ def is_valid_url(url: str) -> bool:
         if not all([result.scheme, result.netloc]):
             return False
 
+        # Direct file URLs from any domain are accepted
+        if is_direct_file_url(cleaned):
+            return True
+
+        # Otherwise check supported platforms
         valid_domains = [
             'youtube.com', 'youtu.be', 'vimeo.com',
             'soundcloud.com', 'twitter.com', 'x.com',

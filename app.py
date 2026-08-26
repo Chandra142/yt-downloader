@@ -191,6 +191,17 @@ def api_cancel(job_id):
     return jsonify({'success': False, 'error': 'Job not found.'}), 404
 
 
+@app.route('/api/resume/<job_id>', methods=['POST'])
+def api_resume(job_id):
+    if len(job_id) > 64:
+        return jsonify({'success': False, 'error': {'code': 'INVALID_JOB', 'message': 'Invalid job ID.'}}), 400
+
+    success = downloader.resume_download(job_id)
+    if success:
+        return jsonify({'success': True, 'job_id': job_id, 'status': 'queued'})
+    return jsonify({'success': False, 'error': {'code': 'NOT_RESUMABLE', 'message': 'Cannot resume this download.'}}), 400
+
+
 @app.route('/download/<job_id>', methods=['GET'])
 def serve_download(job_id):
     """Serve the completed file — only the file belonging to this job."""
