@@ -7,13 +7,13 @@ A clean, responsive Flask web application for downloading media from YouTube and
 - **Downloader:** yt-dlp with FFmpeg
 - **Deployment:** Docker on Render
 
-> ⚠️ **Responsible Use:** Only download content you own or have permission to download. Respect platform Terms of Service. This app does not bypass DRM, paywalls, or access controls.
+> **Responsible Use:** Only download content you own or have permission to download. Respect platform Terms of Service. This app does not bypass DRM, paywalls, or access controls.
 
 ## Quick Start
 
 ### Prerequisites
 - **Python 3.11+**
-- **FFmpeg** (required for MP4 merging and MP3 conversion)
+- **FFmpeg** (required for MP4 merging, MP3 conversion, and subtitle embedding)
 
 ### Setup (Windows)
 ```cmd
@@ -40,19 +40,25 @@ Then open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 3. Add `C:\ffmpeg\bin` to your Windows `PATH` environment variable
 4. Verify: `ffmpeg -version` in a new Command Prompt
 
-> If FFmpeg is missing, the app will run but show warnings for failed conversions.
+> If FFmpeg is missing, the app will run but show warnings for failed conversions. Subtitles will not be embedded.
 
 ## Features
 
-✨ Metadata preview (title, channel, duration, thumbnail)  
-📊 Multiple quality options (Best, 1080p, 720p, 480p, 360p)  
-🎬 Download as MP4 or MP3  
-⏱️ Real-time progress with speed & ETA  
-🌓 Dark/Light mode with localStorage persistence  
-📱 Fully responsive (desktop, tablet, mobile)  
-🔒 Security headers & path traversal protection  
-⏭️ Rate limiting & concurrent download limits  
-🧹 Automatic cleanup of expired jobs  
+- Metadata preview (title, channel, duration, thumbnail)
+- Multiple quality options (Best, 1080p, 720p, 480p, 360p)
+- Download as MP4 or MP3
+- **Subtitle embedding** — auto-fetches English captions (manual + auto-generated) and embeds them into MP4
+- Real-time progress with speed & ETA
+- **Paste button & drag-and-drop** — paste URLs from clipboard or drop them onto the input
+- **Toast notifications** — animated feedback for actions and errors
+- **Copy download link** — copy the direct file URL after download completes
+- **Keyboard shortcuts** — Enter to fetch, Escape to cancel
+- Dark/Light mode with localStorage persistence
+- Fully responsive (desktop, tablet, mobile)
+- Skeleton loading animations
+- Security headers & path traversal protection
+- Rate limiting & concurrent download limits
+- Automatic cleanup of expired jobs
 
 ---
 
@@ -147,14 +153,14 @@ Copy `.env.example` to `.env` and edit as needed. Never commit `.env`.
 
 ## Security
 
-- ✅ Backend URL validation (frontend not trusted)
-- ✅ Format whitelist (only `best` and `audio_only` accepted)
-- ✅ Path traversal protection (`werkzeug.safe_join`)
-- ✅ Server-side filename generation (no user input in paths)
-- ✅ Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `CSP`)
-- ✅ Per-IP rate limiting
-- ✅ No shell injection (Python API, never `shell=True`)
-- ✅ No secrets in responses (no stack traces or file paths leaked)
+- Backend URL validation (frontend not trusted)
+- Format whitelist (only `best`, `audio_only`, and `height_*` accepted)
+- Path traversal protection (`werkzeug.safe_join`)
+- Server-side filename generation (no user input in paths)
+- Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `CSP`)
+- Per-IP rate limiting
+- No shell injection (Python API, never `shell=True`)
+- No secrets in responses (no stack traces or file paths leaked)
 
 ## Limitations
 
@@ -162,13 +168,12 @@ Copy `.env.example` to `.env` and edit as needed. Never commit `.env`.
 - **Ephemeral storage** — files deleted on container restart (cloud platforms)
 - **Single-process rate limiter** — doesn't work across multiple Gunicorn workers (use Nginx in production)
 - **No persistence** — not designed as a file archive service
-- **FFmpeg required** — needed for MP3 conversion and high-quality MP4 merging
+- **FFmpeg required** — needed for MP3 conversion, high-quality MP4 merging, and subtitle embedding
 
 ## Future Ideas
 
 - Playlist support (batch downloads)
 - Download queue with priority
-- Subtitle fetching
 - S3 storage for completed files (removes ephemeral limitation)
 - Redis + Celery for distributed job queue
 - User authentication & download history

@@ -334,6 +334,41 @@ button:disabled {
     gap: 0.3rem;
 }
 
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.5rem;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    transition: background-color var(--transition);
+}
+
+.stat-label {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
 .actions {
     display: flex;
     gap: 0.75rem;
@@ -521,6 +556,11 @@ footer {
     .theme-label { display: none; }
 
     .progress-details { flex-direction: column; }
+
+    .progress-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
 
     button, .primary-btn, .success-btn, .danger-btn, .secondary-btn {
         padding: 0.85rem 1.4rem;

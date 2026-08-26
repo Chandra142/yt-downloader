@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 import shutil
 import logging
 from pathlib import Path
@@ -12,7 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger('ytdownloader')
 
 def normalize_url(url: str) -> str:
-    """Extract the real URL from pasted text like '1 = https://...'"""
+    """Extract the real URL from pasted text and strip problematic query params."""
     if not url:
         return ""
 
@@ -23,6 +23,19 @@ def normalize_url(url: str) -> str:
     match = re.search(r'https?://[^\s<>"\']+', cleaned, flags=re.IGNORECASE)
     if match:
         cleaned = match.group(0).rstrip('.,;)]}>')
+
+    # Strip YouTube radio/playlist params that cause yt-dlp to hang
+    try:
+        parsed = urlparse(cleaned)
+        if 'youtube.com' in (parsed.netloc or ''):
+            params = parse_qs(parsed.query)
+            # These params trigger playlist/radio processing — remove them
+            for key in ['list', 'start_radio', 'index', 'pp']:
+                params.pop(key, None)
+            new_query = urlencode(params, doseq=True)
+            cleaned = urlunparse(parsed._replace(query=new_query))
+    except Exception:
+        pass
 
     return cleaned
 

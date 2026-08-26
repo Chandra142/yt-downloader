@@ -86,6 +86,11 @@ class Downloader:
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
+            'nocheckcertificate': True,
+            'socket_timeout': 10,
+            'extract_retries': 2,
+            'retries': 2,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -165,6 +170,12 @@ class Downloader:
                 'filename': '',
                 'error': '',
                 'updated_at': time.time(),
+                'started_at': time.time(),
+                'downloaded_bytes': 0,
+                'total_bytes': 0,
+                'elapsed': '',
+                'filesize': '',
+                'fragment': '',
             }
             stop_event = threading.Event()
             _stop_events[job_id] = stop_event
@@ -214,32 +225,63 @@ class Downloader:
             if job_id not in jobs:
                 return
 
-            jobs[job_id]['updated_at'] = time.time()
+            job = jobs[job_id]
+            job['updated_at'] = time.time()
 
             if d['status'] == 'downloading':
-                jobs[job_id]['status'] = 'downloading'
+                job['status'] = 'downloading'
 
                 total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
                 downloaded = d.get('downloaded_bytes', 0)
+
+                job['downloaded_bytes'] = downloaded
+                job['total_bytes'] = total
+
                 if total and total > 0:
-                    jobs[job_id]['progress'] = round(downloaded / total * 100, 1)
+                    job['progress'] = round(downloaded / total * 100, 1)
+                    job['filesize'] = self._format_bytes(total)
+                elif downloaded > 0:
+                    job['filesize'] = f"~{self._format_bytes(downloaded)}"
+
+                if downloaded > 0:
+                    job['fragment'] = self._format_bytes(downloaded)
 
                 speed = d.get('speed')
                 if speed:
-                    jobs[job_id]['speed'] = f"{speed / 1_048_576:.1f} MB/s"
+                    job['speed'] = f"{speed / 1_048_576:.1f} MB/s"
 
                 eta = d.get('eta')
                 if eta is not None and isinstance(eta, (int, float)):
                     m, s = divmod(int(eta), 60)
                     h, m = divmod(m, 60)
                     if h:
-                        jobs[job_id]['eta'] = f"{h:02d}:{m:02d}:{s:02d}"
+                        job['eta'] = f"{h:02d}:{m:02d}:{s:02d}"
                     else:
-                        jobs[job_id]['eta'] = f"{m:02d}:{s:02d}"
+                        job['eta'] = f"{m:02d}:{s:02d}"
+
+                # Elapsed time since download started
+                elapsed_secs = time.time() - job.get('started_at', job['updated_at'])
+                em, es = divmod(int(elapsed_secs), 60)
+                eh, em = divmod(em, 60)
+                if eh:
+                    job['elapsed'] = f"{eh:02d}:{em:02d}:{es:02d}"
+                else:
+                    job['elapsed'] = f"{em:02d}:{es:02d}"
 
             elif d['status'] == 'finished':
-                jobs[job_id]['status'] = 'processing'
-                jobs[job_id]['progress'] = 100
+                job['status'] = 'processing'
+                job['progress'] = 100
+
+    @staticmethod
+    def _format_bytes(n: int) -> str:
+        """Format bytes into human-readable string."""
+        if n <= 0:
+            return "0 B"
+        for unit in ('B', 'KB', 'MB', 'GB'):
+            if abs(n) < 1024:
+                return f"{n:.1f} {unit}"
+            n /= 1024
+        return f"{n:.1f} TB"
 
     def _build_format_string(self, format_choice: str) -> str:
         """

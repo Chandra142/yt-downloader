@@ -48,6 +48,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressPercent   = document.getElementById('progress-percent');
     const progressSpeed     = document.getElementById('progress-speed');
     const progressEta       = document.getElementById('progress-eta');
+    const progressFragment  = document.getElementById('progress-fragment');
+    const progressFilesize  = document.getElementById('progress-filesize');
+    const progressElapsed   = document.getElementById('progress-elapsed');
+    const progressRemaining = document.getElementById('progress-remaining');
     const cancelBtn         = document.getElementById('cancel-btn');
     const saveFileBtn       = document.getElementById('save-file-btn');
     const copyLinkBtn       = document.getElementById('copy-link-btn');
@@ -143,6 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
         progressStatus.textContent = 'Preparing…';
         progressSpeed.textContent = '';
         progressEta.textContent = 'ETA: --:--';
+        progressFragment.textContent = '0 B';
+        progressFilesize.textContent = '—';
+        progressElapsed.textContent = '00:00';
+        progressRemaining.textContent = '—';
         completedActions.classList.add('hidden');
         saveFileBtn.href = '#';
         newDownloadBtn.classList.add('hidden');
@@ -377,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleProgressUpdate(data) {
-        const { status, progress, speed, eta, error } = data;
+        const { status, progress, speed, eta, error, filesize, elapsed, fragment } = data;
 
         switch (status) {
             case 'queued':
@@ -389,6 +397,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 setProgress(progress || 0);
                 progressSpeed.textContent  = speed || '';
                 progressEta.textContent    = eta ? `ETA: ${eta}` : 'ETA: --:--';
+                progressFragment.textContent = fragment || '0 B';
+                progressFilesize.textContent = filesize || '—';
+                progressElapsed.textContent  = elapsed || '00:00';
+                progressRemaining.textContent = eta || '—';
                 break;
 
             case 'processing':
@@ -396,6 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setProgress(100);
                 progressSpeed.textContent  = '';
                 progressEta.textContent    = '';
+                progressRemaining.textContent = '—';
                 break;
 
             case 'completed':
@@ -404,6 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressStatus.textContent = '✓ Download Ready!';
                 progressSpeed.textContent  = '';
                 progressEta.textContent    = '';
+                progressRemaining.textContent = '—';
                 setDownloadingState(false);
                 cancelBtn.classList.add('hidden');
                 saveFileBtn.href = `/download/${currentJobId}`;

@@ -174,6 +174,9 @@ def api_progress(job_id):
         'speed': status['speed'],
         'eta': status['eta'],
         'error': status['error'],
+        'filesize': status.get('filesize', ''),
+        'elapsed': status.get('elapsed', ''),
+        'fragment': status.get('fragment', ''),
     })
 
 
