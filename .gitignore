@@ -1,0 +1,17 @@
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+.env
+downloads/*
+!downloads/.gitkeep
+logs/*
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+.DS_Store
+Thumbs.db

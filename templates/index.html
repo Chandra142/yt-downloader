@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YT Downloader — Simple Online Media Downloader</title>
+    <meta name="description" content="Download media from supported URLs for educational purposes. Fast, simple, and free.">
+    <!-- Open Graph -->
+    <meta property="og:title" content="YT Downloader">
+    <meta property="og:description" content="Download media from supported URLs for educational purposes.">
+    <meta property="og:type" content="website">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="light-mode">
+
+    <!-- Theme toggle -->
+    <div class="theme-switch-wrapper" aria-label="Toggle dark mode">
+        <label class="theme-switch" for="theme-checkbox">
+            <span class="sr-only">Toggle dark mode</span>
+            <input type="checkbox" id="theme-checkbox" aria-label="Dark mode toggle" />
+            <div class="slider round"></div>
+        </label>
+        <span class="theme-label">Dark Mode</span>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="container">
+        <!-- ============ HEADER ============ -->
+        <header role="banner">
+            <h1>YT Downloader</h1>
+            <p class="tagline">Download media from supported URLs</p>
+
+            {% if not ffmpeg_available %}
+            <div class="alert warning" role="alert">
+                ⚠️ <strong>FFmpeg not found.</strong>
+                High-quality video merging and MP3 conversion require FFmpeg.
+                See the <a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">FFmpeg download page</a>
+                for installation instructions.
+            </div>
+            {% endif %}
+        </header>
+
+        <main role="main">
+            <!-- ============ URL INPUT ============ -->
+            <section class="card" aria-label="URL input">
+                <div class="input-group">
+                    <label for="url-input" class="sr-only">YouTube or supported video URL</label>
+                    <input
+                        type="url"
+                        id="url-input"
+                        placeholder="https://youtube.com/watch?v=..."
+                        autocomplete="off"
+                        spellcheck="false"
+                        aria-label="Enter a supported video URL"
+                        maxlength="2048"
+                    >
+                    <button id="fetch-btn" class="primary-btn" aria-label="Fetch video information">
+                        Get Video
+                    </button>
+                    <button id="paste-btn" class="secondary-btn" aria-label="Paste from clipboard" title="Paste from clipboard (Ctrl+V)">
+                        📋 Paste
+                    </button>
+                </div>
+                <p id="url-error" class="error-text hidden" role="alert" aria-live="polite"></p>
+                <p class="hint-text">Supported: YouTube, Vimeo, SoundCloud, Twitter/X, and more. Paste a URL or drag a link here.</p>
+            </section>
+
+            <!-- ============ VIDEO METADATA ============ -->
+            <section id="metadata-section" class="card hidden" aria-label="Video information" aria-live="polite">
+                <div class="media-info">
+                    <div class="thumbnail-wrapper">
+                        <img
+                            id="video-thumbnail"
+                            src=""
+                            alt="Video thumbnail"
+                            class="thumbnail"
+                            loading="lazy"
+                        >
+                        <div id="thumbnail-skeleton" class="skeleton hidden"></div>
+                    </div>
+                    <div class="info-details">
+                        <h2 id="video-title">Video Title</h2>
+                        <div id="title-skeleton" class="skeleton-text hidden"></div>
+                        <p id="video-channel" class="text-muted">Channel Name</p>
+                        <div id="channel-skeleton" class="skeleton-text short hidden"></div>
+                        <p id="video-duration" class="text-muted">00:00</p>
+                    </div>
+                </div>
+
+                <div class="download-options">
+                    <h3>Download Options</h3>
+                    <div class="options-grid">
+                        <div class="option-group">
+                            <label for="format-select">Format & Quality:</label>
+                            <select id="format-select" aria-label="Select download format and quality">
+                                <!-- Populated dynamically by app.js -->
+                                <option value="best">Best Available (MP4)</option>
+                                <option value="audio_only">Audio Only (MP3)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="download-btn" class="success-btn" aria-label="Start download">
+                        ⬇ Download
+                    </button>
+                </div>
+            </section>
+
+            <!-- ============ PROGRESS ============ -->
+            <section id="progress-section" class="card hidden" aria-label="Download progress" aria-live="polite">
+                <h3 id="progress-status">Preparing…</h3>
+
+                <div class="progress-bar-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-aria">
+                    <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+                </div>
+
+                <div class="progress-details">
+                    <span id="progress-percent" aria-label="Progress percentage">0%</span>
+                    <span id="progress-speed" aria-label="Download speed"></span>
+                    <span id="progress-eta" aria-label="Estimated time remaining">ETA: --:--</span>
+                </div>
+
+                <div class="actions mt-15">
+                    <button id="cancel-btn" class="danger-btn" aria-label="Cancel download">
+                        ✕ Cancel
+                    </button>
+                    <div id="completed-actions" class="hidden">
+                        <a
+                            id="save-file-btn"
+                            class="primary-btn"
+                            href="#"
+                            role="button"
+                            aria-label="Save downloaded file"
+                            download
+                        >
+                            ⬇ Save File
+                        </a>
+                        <button id="copy-link-btn" class="secondary-btn" aria-label="Copy download link" title="Copy direct download link">
+                            🔗 Copy Link
+                        </button>
+                        <button id="new-download-btn" class="secondary-btn" aria-label="Start a new download">
+                            ↺ New Download
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- ============ FOOTER ============ -->
+        <footer role="contentinfo">
+            <p>
+                <strong>Educational project.</strong>
+                Only download content you are authorized to download.
+                Respect the terms of service of each platform.
+            </p>
+            <p class="text-muted">&copy; 2026 YT Downloader. MIT License.</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

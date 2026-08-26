@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: yt-downloader
+    # Use 'docker' env so Render builds from the Dockerfile (which installs FFmpeg)
+    env: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MAX_CONCURRENT_DOWNLOADS
+        value: "3"
+      - key: JOB_EXPIRATION
+        value: "3600"
