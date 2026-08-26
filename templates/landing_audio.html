@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ meta_description }}">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#3b82f6">
+    <link rel="canonical" href="{{ canonical_url }}">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="{{ og_title }}">
+    <meta property="og:description" content="{{ og_description }}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ og_url }}">
+    <meta property="og:site_name" content="YT Downloader">
+
+    <!-- Twitter/X Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ og_title }}">
+    <meta name="twitter:description" content="{{ og_description }}">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "YT Downloader — YouTube Audio Downloader",
+        "url": "{{ canonical_url }}",
+        "description": "Extract audio from YouTube videos and download as MP3. High quality 192kbps audio conversion.",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Web Browser",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        }
+    }
+    </script>
+</head>
+<body class="light-mode">
+
+    <div class="theme-switch-wrapper" aria-label="Toggle dark mode">
+        <label class="theme-switch" for="theme-checkbox">
+            <span class="sr-only">Toggle dark mode</span>
+            <input type="checkbox" id="theme-checkbox" aria-label="Dark mode toggle" />
+            <div class="slider round"></div>
+        </label>
+        <span class="theme-label">Dark Mode</span>
+    </div>
+
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="container">
+        <header role="banner">
+            <h1>YouTube Audio Downloader</h1>
+            <p class="tagline">Extract audio from YouTube videos and download as MP3. Free, fast, and no registration required.</p>
+
+            {% if not ffmpeg_available %}
+            <div class="alert warning" role="alert">
+                <strong>FFmpeg not found.</strong>
+                MP3 conversion requires FFmpeg.
+                See the <a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">FFmpeg download page</a>.
+            </div>
+            {% endif %}
+        </header>
+
+        <main role="main">
+            <section class="card" aria-label="URL input">
+                <div class="input-group">
+                    <label for="url-input" class="sr-only">YouTube video URL</label>
+                    <input
+                        type="url"
+                        id="url-input"
+                        placeholder="https://youtube.com/watch?v=..."
+                        autocomplete="off"
+                        spellcheck="false"
+                        aria-label="Enter a YouTube video URL"
+                        maxlength="2048"
+                    >
+                    <button id="fetch-btn" class="primary-btn" aria-label="Fetch video information">
+                        Get Video
+                    </button>
+                    <button id="paste-btn" class="secondary-btn" aria-label="Paste from clipboard" title="Paste from clipboard (Ctrl+V)">
+                        📋 Paste
+                    </button>
+                </div>
+                <p id="url-error" class="error-text hidden" role="alert" aria-live="polite"></p>
+                <p class="hint-text">Paste a YouTube video URL to extract audio as MP3.</p>
+            </section>
+
+            <section id="metadata-section" class="card hidden" aria-label="Video information" aria-live="polite">
+                <div class="media-info">
+                    <div class="thumbnail-wrapper">
+                        <img id="video-thumbnail" src="" alt="Video thumbnail" class="thumbnail" loading="lazy">
+                        <div id="thumbnail-skeleton" class="skeleton hidden"></div>
+                    </div>
+                    <div class="info-details">
+                        <h2 id="video-title">Video Title</h2>
+                        <p id="video-channel" class="text-muted">Channel Name</p>
+                        <p id="video-duration" class="text-muted">00:00</p>
+                    </div>
+                </div>
+                <div class="download-options">
+                    <h3>Audio Options</h3>
+                    <div class="options-grid">
+                        <div class="option-group">
+                            <label for="format-select">Format:</label>
+                            <select id="format-select" aria-label="Select audio format">
+                                <option value="best">Best Available (MP4)</option>
+                                <option value="audio_only">Audio Only (MP3)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="download-btn" class="success-btn" aria-label="Start download">⬇ Download</button>
+                </div>
+            </section>
+
+            <section id="progress-section" class="card hidden" aria-label="Download progress" aria-live="polite">
+                <h3 id="progress-status">Preparing…</h3>
+                <div class="progress-bar-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-aria">
+                    <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+                </div>
+                <div class="progress-details">
+                    <span id="progress-percent" aria-label="Progress percentage">0%</span>
+                    <span id="progress-speed" aria-label="Download speed"></span>
+                    <span id="progress-eta" aria-label="Estimated time remaining">ETA: --:--</span>
+                </div>
+                <div class="progress-stats">
+                    <div class="stat-item"><span class="stat-label">Downloaded</span><span id="progress-fragment" class="stat-value">0 B</span></div>
+                    <div class="stat-item"><span class="stat-label">Total Size</span><span id="progress-filesize" class="stat-value">—</span></div>
+                    <div class="stat-item"><span class="stat-label">Elapsed</span><span id="progress-elapsed" class="stat-value">00:00</span></div>
+                    <div class="stat-item"><span class="stat-label">Remaining</span><span id="progress-remaining" class="stat-value">—</span></div>
+                </div>
+                <div class="actions mt-15">
+                    <button id="cancel-btn" class="danger-btn" aria-label="Cancel download">✕ Cancel</button>
+                    <div id="completed-actions" class="hidden">
+                        <button id="resume-btn" class="primary-btn hidden" aria-label="Resume download">▶ Resume</button>
+                        <a id="save-file-btn" class="primary-btn hidden" href="#" role="button" aria-label="Save downloaded file" download>⬇ Save File</a>
+                        <button id="copy-link-btn" class="secondary-btn hidden" aria-label="Copy download link">🔗 Copy Link</button>
+                        <button id="new-download-btn" class="secondary-btn" aria-label="Start a new download">↺ New Download</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card seo-content" aria-label="How to download YouTube audio">
+                <h2>How to Convert YouTube to MP3</h2>
+                <ol>
+                    <li>Copy the URL of any YouTube video.</li>
+                    <li>Paste it into the input field above and click <strong>Get Video</strong>.</li>
+                    <li>Select <strong>Audio Only (MP3)</strong> from the format dropdown.</li>
+                    <li>Click <strong>Download</strong> and wait for the conversion to complete.</li>
+                    <li>Save the MP3 file to your device.</li>
+                </ol>
+
+                <h2>Audio Quality</h2>
+                <p>
+                    Audio is extracted and converted to MP3 at <strong>192kbps</strong> quality.
+                    This provides a good balance between file size and audio fidelity.
+                    FFmpeg is required for the conversion process.
+                </p>
+
+                <h2>Frequently Asked Questions</h2>
+
+                <h3>What audio format is used?</h3>
+                <p>Audio is converted to MP3 at 192kbps, which is compatible with virtually all devices and media players.</p>
+
+                <h3>Do I need FFmpeg installed?</h3>
+                <p>Yes. FFmpeg is required for the audio extraction and conversion process. Without it, only video downloads will work.</p>
+
+                <h3>Is there a limit on video length?</h3>
+                <p>There is no explicit length limit, but very long videos may take more time to process and convert.</p>
+            </section>
+
+            <footer role="contentinfo">
+                <nav aria-label="Footer navigation">
+                    <a href="/">Home</a> &middot;
+                    <a href="/youtube-video-downloader">YouTube Video Downloader</a> &middot;
+                    <a href="/sitemap.xml">Sitemap</a>
+                </nav>
+                <p><strong>Educational project.</strong> Only download content you are authorized to download.</p>
+                <p class="text-muted">&copy; 2026 YT Downloader. MIT License.</p>
+            </footer>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

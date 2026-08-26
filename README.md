@@ -81,19 +81,22 @@ Downloads run in daemon threads. Job state stored in a module-level dict with `t
 
 ```
 yt-downloader/
-├── app.py                  # Flask API server
+├── app.py                  # Flask API server + SEO routes
 ├── downloader.py           # Download logic & job manager
-├── config.py               # Configuration
+├── config.py               # Configuration (incl. SITE_URL)
 ├── utils.py                # Helpers (validation, sanitization)
 ├── templates/              # HTML templates
-│   ├── index.html
-│   └── error.html
+│   ├── index.html          # Homepage (SEO-optimized)
+│   ├── error.html          # Error page (noindex)
+│   ├── landing_video.html  # YouTube video downloader landing page
+│   └── landing_audio.html  # YouTube audio downloader landing page
 ├── static/                 # CSS & JavaScript
 │   ├── css/style.css
 │   └── js/app.js
 ├── tests/                  # Unit & integration tests
 │   ├── test_utils.py
-│   └── test_routes.py
+│   ├── test_routes.py
+│   └── test_seo.py         # SEO & technical SEO tests
 ├── downloads/              # Temporary downloads (gitignored)
 ├── Dockerfile              # Production container
 ├── render.yaml             # Render deployment config
@@ -148,8 +151,25 @@ Never use `debug=True` or `flask run` in production.
 | `JOB_EXPIRATION` | `3600` | Seconds before old jobs cleanup |
 | `FLASK_ENV` | `development` | `production` or `development` |
 | `MAX_REQUESTS_PER_MINUTE` | `10` | Rate limit per IP |
+| `SITE_URL` | `http://127.0.0.1:5000` | Public URL for canonical tags, sitemap, and robots.txt |
 
 Copy `.env.example` to `.env` and edit as needed. Never commit `.env`.
+
+---
+
+## SEO & Technical SEO
+
+The app includes full technical SEO support for search engine discoverability:
+
+- **`/robots.txt`** — Standard robots file allowing crawling of public pages, blocking `/api/` and `/download/`, and linking to the sitemap.
+- **`/sitemap.xml`** — XML sitemap listing the homepage and both landing pages with priorities and change frequencies.
+- **`/youtube-video-downloader`** — Dedicated landing page for YouTube video downloads with JSON-LD structured data, FAQ sections, and internal links.
+- **`/youtube-audio-downloader`** — Dedicated landing page for YouTube audio downloads with JSON-LD structured data, FAQ sections, and internal links.
+- **Meta tags** — Title, description, canonical URL, Open Graph, and Twitter/X Card meta tags on all public pages.
+- **JSON-LD** — `WebApplication` structured data on all public pages.
+- **`noindex`** — Error pages (404, 500) include `<meta name="robots" content="noindex, nofollow">` to prevent indexing.
+
+Set `SITE_URL` to your production domain (e.g. `https://your-domain.com`) for correct canonical URLs and sitemap entries.
 
 ## Security
 

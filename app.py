@@ -1,13 +1,40 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory, abort
+from flask import Flask, request, jsonify, render_template, send_from_directory, abort, Response
 import os
 import re
+from markupsafe import escape
 from werkzeug.utils import safe_join
-from config import SECRET_KEY, DOWNLOAD_DIR, DEBUG
+from config import SECRET_KEY, DOWNLOAD_DIR, DEBUG, SITE_URL
 from utils import is_valid_url, check_ffmpeg, logger, normalize_url
 from downloader import downloader
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
+
+
+# ---------------------------------------------------------------------------
+# SEO context processor — available in all templates
+# ---------------------------------------------------------------------------
+@app.context_processor
+def inject_seo():
+    """Inject SEO variables into all templates."""
+    return {
+        'site_url': SITE_URL,
+    }
+
+
+def _seo_context(page_title, description, path, og_image=None):
+    """Build a safe SEO context dict for a given page."""
+    canonical = f"{SITE_URL}{path}"
+    return {
+        'page_title': page_title,
+        'meta_description': description,
+        'canonical_url': canonical,
+        'og_title': page_title,
+        'og_description': description,
+        'og_url': canonical,
+        'og_image': og_image or f"{SITE_URL}/static/img/og-default.png",
+        'site_url': SITE_URL,
+    }
 
 # ---------------------------------------------------------------------------
 # Security headers — added to every response
@@ -64,7 +91,12 @@ def _is_rate_limited(ip: str) -> bool:
 @app.route('/')
 def index():
     ffmpeg_available = check_ffmpeg()
-    return render_template('index.html', ffmpeg_available=ffmpeg_available)
+    seo = _seo_context(
+        'YT Downloader — Free Online Video & Audio Downloader',
+        'Download videos and audio from YouTube, Vimeo, SoundCloud, Twitter/X, TikTok, and more. Supports MP4, MP3, multiple quality options, and subtitle embedding. Free, fast, and open source.',
+        '/',
+    )
+    return render_template('index.html', ffmpeg_available=ffmpeg_available, **seo)
 
 
 @app.route('/api/info', methods=['POST'])
@@ -232,17 +264,76 @@ def serve_download(job_id):
 
 
 # ---------------------------------------------------------------------------
+# SEO routes — robots.txt, sitemap.xml, landing pages
+# ---------------------------------------------------------------------------
+
+@app.route('/robots.txt')
+def robots_txt():
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        "Disallow: /download/\n"
+        "\n"
+        f"Sitemap: {SITE_URL}/sitemap.xml\n"
+    )
+    return Response(content, mimetype='text/plain')
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    pages = [
+        ('/', '1.0', 'daily'),
+        ('/youtube-video-downloader', '0.8', 'weekly'),
+        ('/youtube-audio-downloader', '0.8', 'weekly'),
+    ]
+    xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>']
+    xml_parts.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
+    for loc_path, priority, changefreq in pages:
+        xml_parts.append('  <url>')
+        xml_parts.append(f'    <loc>{SITE_URL}{loc_path}</loc>')
+        xml_parts.append(f'    <changefreq>{changefreq}</changefreq>')
+        xml_parts.append(f'    <priority>{priority}</priority>')
+        xml_parts.append('  </url>')
+    xml_parts.append('</urlset>')
+    xml_body = '\n'.join(xml_parts)
+    return Response(xml_body, mimetype='application/xml')
+
+
+@app.route('/youtube-video-downloader')
+def youtube_video_downloader():
+    ffmpeg_available = check_ffmpeg()
+    seo = _seo_context(
+        'YouTube Video Downloader — Download YouTube Videos as MP4',
+        'Download YouTube videos in MP4 format. Choose from multiple quality options including 1080p, 720p, 480p, and 360p. Free, fast, and no registration required.',
+        '/youtube-video-downloader',
+    )
+    return render_template('landing_video.html', ffmpeg_available=ffmpeg_available, **seo)
+
+
+@app.route('/youtube-audio-downloader')
+def youtube_audio_downloader():
+    ffmpeg_available = check_ffmpeg()
+    seo = _seo_context(
+        'YouTube Audio Downloader — Convert YouTube to MP3',
+        'Extract audio from YouTube videos and download as MP3. High quality 192kbps audio conversion. Free, fast, and no registration required.',
+        '/youtube-audio-downloader',
+    )
+    return render_template('landing_audio.html', ffmpeg_available=ffmpeg_available, **seo)
+
+
+# ---------------------------------------------------------------------------
 # Custom error pages — never expose Python tracebacks
 # ---------------------------------------------------------------------------
 @app.errorhandler(404)
 def not_found(e):
-    return render_template('error.html', code=404, message='Page not found.'), 404
+    return render_template('error.html', code=404, message='Page not found.', noindex=True), 404
 
 
 @app.errorhandler(500)
 def server_error(e):
     logger.error(f"500 error: {e}")
-    return render_template('error.html', code=500, message='Internal server error.'), 500
+    return render_template('error.html', code=500, message='Internal server error.', noindex=True), 500
 
 
 # ---------------------------------------------------------------------------

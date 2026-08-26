@@ -3,14 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YT Downloader — Simple Online Media Downloader</title>
-    <meta name="description" content="Download media from supported URLs for educational purposes. Fast, simple, and free.">
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ meta_description }}">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#3b82f6">
+    <link rel="canonical" href="{{ canonical_url }}">
+
     <!-- Open Graph -->
-    <meta property="og:title" content="YT Downloader">
-    <meta property="og:description" content="Download media from supported URLs for educational purposes.">
+    <meta property="og:title" content="{{ og_title }}">
+    <meta property="og:description" content="{{ og_description }}">
     <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ og_url }}">
+    <meta property="og:site_name" content="YT Downloader">
+
+    <!-- Twitter/X Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ og_title }}">
+    <meta name="twitter:description" content="{{ og_description }}">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Structured Data — WebApplication -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "YT Downloader",
+        "url": "{{ canonical_url }}",
+        "description": "Free online tool to download videos and audio from YouTube, Vimeo, SoundCloud, Twitter/X, TikTok, and more.",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Web Browser",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "featureList": [
+            "Download videos as MP4 in multiple quality options",
+            "Extract audio as MP3",
+            "Subtitle embedding",
+            "Real-time download progress",
+            "Support for YouTube, Vimeo, SoundCloud, Twitter/X, TikTok",
+            "Direct file download with resume support"
+        ]
+    }
+    </script>
 </head>
 <body class="light-mode">
 
@@ -31,11 +69,11 @@
         <!-- ============ HEADER ============ -->
         <header role="banner">
             <h1>YT Downloader</h1>
-            <p class="tagline">Download media from supported URLs</p>
+            <p class="tagline">Free online video &amp; audio downloader. Download media from YouTube and other supported platforms.</p>
 
             {% if not ffmpeg_available %}
             <div class="alert warning" role="alert">
-                ⚠️ <strong>FFmpeg not found.</strong>
+                <strong>FFmpeg not found.</strong>
                 High-quality video merging and MP3 conversion require FFmpeg.
                 See the <a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">FFmpeg download page</a>
                 for installation instructions.
@@ -65,7 +103,7 @@
                     </button>
                 </div>
                 <p id="url-error" class="error-text hidden" role="alert" aria-live="polite"></p>
-                <p class="hint-text">Supported: YouTube, Vimeo, SoundCloud, Twitter/X, and more. Paste a URL or drag a link here.</p>
+                <p class="hint-text">Supported: YouTube, Vimeo, SoundCloud, Twitter/X, TikTok, and direct media file links.</p>
             </section>
 
             <!-- ============ VIDEO METADATA ============ -->
@@ -94,7 +132,7 @@
                     <h3>Download Options</h3>
                     <div class="options-grid">
                         <div class="option-group">
-                            <label for="format-select">Format & Quality:</label>
+                            <label for="format-select">Format &amp; Quality:</label>
                             <select id="format-select" aria-label="Select download format and quality">
                                 <!-- Populated dynamically by app.js -->
                                 <option value="best">Best Available (MP4)</option>
@@ -168,17 +206,49 @@
                     </div>
                 </div>
             </section>
-        </main>
 
-        <!-- ============ FOOTER ============ -->
-        <footer role="contentinfo">
-            <p>
-                <strong>Educational project.</strong>
-                Only download content you are authorized to download.
-                Respect the terms of service of each platform.
-            </p>
-            <p class="text-muted">&copy; 2026 YT Downloader. MIT License.</p>
-        </footer>
+            <!-- ============ HOW IT WORKS ============ -->
+            <section class="card seo-content" aria-label="How it works">
+                <h2>How to Download Videos</h2>
+                <ol>
+                    <li>Paste a video URL from YouTube, Vimeo, SoundCloud, or another supported platform.</li>
+                    <li>Click <strong>Get Video</strong> to fetch available formats and quality options.</li>
+                    <li>Select your preferred format (MP4 for video, MP3 for audio) and quality.</li>
+                    <li>Click <strong>Download</strong> and wait for the file to be ready.</li>
+                    <li>Save the file to your device when the download completes.</li>
+                </ol>
+
+                <h2>Supported Platforms</h2>
+                <p>
+                    YT Downloader works with
+                    <a href="/youtube-video-downloader">YouTube</a>,
+                    Vimeo, SoundCloud, Twitter/X, TikTok, Facebook, Instagram,
+                    and direct media file links (.mp4, .mkv, .mp3, and more).
+                </p>
+
+                <h2>Supported Formats</h2>
+                <p>
+                    Download videos as <strong>MP4</strong> in multiple quality options (up to 4K when available),
+                    or extract audio as <strong>MP3</strong> at 192kbps.
+                    Subtitles are automatically embedded when available.
+                </p>
+            </section>
+
+            <!-- ============ FOOTER ============ -->
+            <footer role="contentinfo">
+                <nav aria-label="Footer navigation">
+                    <a href="/youtube-video-downloader">YouTube Video Downloader</a> &middot;
+                    <a href="/youtube-audio-downloader">YouTube Audio Downloader</a> &middot;
+                    <a href="/sitemap.xml">Sitemap</a>
+                </nav>
+                <p>
+                    <strong>Educational project.</strong>
+                    Only download content you are authorized to download.
+                    Respect the terms of service of each platform.
+                </p>
+                <p class="text-muted">&copy; 2026 YT Downloader. MIT License.</p>
+            </footer>
+        </main>
     </div>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
