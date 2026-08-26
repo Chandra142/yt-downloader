@@ -98,12 +98,15 @@ class Downloader:
                 'AppleWebKit/537.36 (KHTML, like Gecko) '
                 'Chrome/131.0.0.0 Safari/537.36'
             ),
-            # Helps with YouTube from cloud/datacenter IPs
             'geo_bypass': True,
             'http_headers': {
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             },
+            # Enable JS runtimes for YouTube's n-challenge solver
+            'js_runtimes': {'node': {}, 'deno': {}},
+            # Download EJS challenge solver scripts from GitHub
+            'remote_components': {'ejs:github'},
         }
 
     def get_video_info(self, url: str) -> dict:
@@ -120,11 +123,11 @@ class Downloader:
             'skip_download': True,
         }
 
-        # For YouTube: try multiple extractor clients to bypass datacenter blocks
+        # For YouTube: use tv/web_safari clients — most reliable for bot detection
         if self._is_youtube_url(url):
             ydl_opts['extractor_args'] = {
                 'youtube': {
-                    'player_client': ['mweb', 'android', 'ios', 'web'],
+                    'player_client': ['tv', 'web_safari', 'web', 'mweb'],
                 },
             }
         try:
@@ -172,13 +175,16 @@ class Downloader:
                 user_msg = 'This video is private and cannot be accessed.'
             elif 'Sign in to confirm' in msg or 'bot' in msg.lower():
                 user_msg = (
-                    'YouTube is blocking this request. '
-                    'This may happen on cloud servers. Please try again later.'
+                    'YouTube is currently blocking automated access. '
+                    'This is a known limitation when using cloud servers. '
+                    'Please try a different supported platform (Vimeo, SoundCloud, etc.) '
+                    'or try again later.'
                 )
             elif 'HTTP Error 403' in msg or '403' in msg:
                 user_msg = (
-                    'YouTube blocked the request (HTTP 403). '
-                    'This commonly happens on cloud/datacenter IPs. Try again later.'
+                    'YouTube blocked the request. '
+                    'This is a known limitation on cloud servers. '
+                    'Please try a different supported platform or try again later.'
                 )
             elif 'not available' in msg.lower() or 'unavailable' in msg.lower():
                 user_msg = 'This video is not available.'
@@ -689,11 +695,11 @@ class Downloader:
             'embedsubtitles': True,
         }
 
-        # For YouTube: try multiple extractor clients to bypass datacenter blocks
+        # For YouTube: use tv/web_safari clients — most reliable for bot detection
         if self._is_youtube_url(url):
             ydl_opts['extractor_args'] = {
                 'youtube': {
-                    'player_client': ['mweb', 'android', 'ios', 'web'],
+                    'player_client': ['tv', 'web_safari', 'web', 'mweb'],
                 },
             }
 
@@ -784,15 +790,16 @@ class Downloader:
                     elif 'Sign in to confirm' in err_msg or 'bot' in err_msg.lower():
                         jobs[job_id]['status'] = 'failed'
                         jobs[job_id]['error'] = (
-                            'YouTube is blocking this request. '
-                            'This may happen on cloud servers. Please try again later.'
+                            'YouTube is currently blocking automated access. '
+                            'This is a known limitation on cloud servers. '
+                            'Try a different supported platform or try again later.'
                         )
                     elif 'HTTP Error 403' in err_msg or '403' in err_msg:
                         jobs[job_id]['status'] = 'failed'
                         jobs[job_id]['error'] = (
-                            'YouTube blocked the request (HTTP 403). '
-                            'This commonly happens on cloud/datacenter IPs. '
-                            'Try a different video or try again later.'
+                            'YouTube blocked the request. '
+                            'This is a known limitation on cloud servers. '
+                            'Try a different supported platform or try again later.'
                         )
                     elif 'not available' in err_msg.lower():
                         jobs[job_id]['status'] = 'failed'

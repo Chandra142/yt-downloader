@@ -1,11 +1,13 @@
 # Minimal Dockerfile for Render deployment
-# Ensures FFmpeg is available alongside Python + app dependencies
+# Ensures FFmpeg + Node.js are available alongside Python + app dependencies
 
 FROM python:3.11-slim
 
-# Install FFmpeg via apt-get (available in Debian/Ubuntu-based slim images)
+# Install FFmpeg (media processing) and Node.js (yt-dlp JS solver for YouTube n-challenge)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
