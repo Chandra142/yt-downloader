@@ -78,6 +78,34 @@ class Downloader:
     # Public API
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _is_youtube_url(url: str) -> bool:
+        """Check if URL is a YouTube URL."""
+        return 'youtube.com' in url or 'youtu.be' in url
+
+    @staticmethod
+    def _ydl_opts_base() -> dict:
+        """Base yt-dlp options common to info extraction and download."""
+        return {
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+            'socket_timeout': 15,
+            'extract_retries': 3,
+            'retries': 3,
+            'user_agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/131.0.0.0 Safari/537.36'
+            ),
+            # Helps with YouTube from cloud/datacenter IPs
+            'geo_bypass': True,
+            'http_headers': {
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+        }
+
     def get_video_info(self, url: str) -> dict:
         """
         Extract metadata from a URL using yt-dlp WITHOUT downloading the media.
@@ -88,15 +116,17 @@ class Downloader:
             return self._get_direct_file_info(url)
 
         ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
+            **self._ydl_opts_base(),
             'skip_download': True,
-            'nocheckcertificate': True,
-            'socket_timeout': 10,
-            'extract_retries': 2,
-            'retries': 2,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         }
+
+        # For YouTube: try multiple extractor clients to bypass datacenter blocks
+        if self._is_youtube_url(url):
+            ydl_opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['mweb', 'android', 'ios', 'web'],
+                },
+            }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -140,6 +170,16 @@ class Downloader:
             logger.error(f"yt-dlp DownloadError fetching info for {url}: {msg}")
             if 'Private video' in msg or 'private' in msg.lower():
                 user_msg = 'This video is private and cannot be accessed.'
+            elif 'Sign in to confirm' in msg or 'bot' in msg.lower():
+                user_msg = (
+                    'YouTube is blocking this request. '
+                    'This may happen on cloud servers. Please try again later.'
+                )
+            elif 'HTTP Error 403' in msg or '403' in msg:
+                user_msg = (
+                    'YouTube blocked the request (HTTP 403). '
+                    'This commonly happens on cloud/datacenter IPs. Try again later.'
+                )
             elif 'not available' in msg.lower() or 'unavailable' in msg.lower():
                 user_msg = 'This video is not available.'
             else:
@@ -638,9 +678,8 @@ class Downloader:
         output_tmpl = str(Path(DOWNLOAD_DIR) / f'%(title)s_{job_id}.%(ext)s')
 
         ydl_opts: dict = {
+            **self._ydl_opts_base(),
             'outtmpl': output_tmpl,
-            'quiet': True,
-            'no_warnings': True,
             'progress_hooks': [lambda d: self._progress_hook(d, job_id, stop_event)],
             'restrictfilenames': True,
             # Subtitle options
@@ -649,6 +688,14 @@ class Downloader:
             'subtitleslangs': ['en', 'en-US', 'en-GB'],
             'embedsubtitles': True,
         }
+
+        # For YouTube: try multiple extractor clients to bypass datacenter blocks
+        if self._is_youtube_url(url):
+            ydl_opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['mweb', 'android', 'ios', 'web'],
+                },
+            }
 
         fmt_str = self._build_format_string(format_choice)
 
@@ -734,6 +781,19 @@ class Downloader:
                     elif 'Private video' in err_msg or 'private' in err_msg.lower():
                         jobs[job_id]['status'] = 'failed'
                         jobs[job_id]['error'] = 'This video is private and cannot be downloaded.'
+                    elif 'Sign in to confirm' in err_msg or 'bot' in err_msg.lower():
+                        jobs[job_id]['status'] = 'failed'
+                        jobs[job_id]['error'] = (
+                            'YouTube is blocking this request. '
+                            'This may happen on cloud servers. Please try again later.'
+                        )
+                    elif 'HTTP Error 403' in err_msg or '403' in err_msg:
+                        jobs[job_id]['status'] = 'failed'
+                        jobs[job_id]['error'] = (
+                            'YouTube blocked the request (HTTP 403). '
+                            'This commonly happens on cloud/datacenter IPs. '
+                            'Try a different video or try again later.'
+                        )
                     elif 'not available' in err_msg.lower():
                         jobs[job_id]['status'] = 'failed'
                         jobs[job_id]['error'] = 'This video is not available in your region or has been removed.'
